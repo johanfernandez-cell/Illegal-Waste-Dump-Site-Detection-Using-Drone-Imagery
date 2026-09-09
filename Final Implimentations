@@ -1,0 +1,200 @@
+import cv2
+import numpy as np
+from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
+import matplotlib.pyplot as plt
+
+class WasteDetectionSystem:
+    def __init__(self, drone_altitude=50, camera_fov=60):
+        self.drone_altitude = drone_altitude
+        self.camera_fov = camera_fov
+        
+    def process_image(self, image_path):
+        """Process a single drone image for waste detection."""
+        # Detection pipeline
+        img, hsv = self._preprocess(image_path)
+        mask = self._color_segmentation(hsv)
+        mask = self._refine_mask(mask)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Texture analysis
+        lbp_hist, lbp = self._extract_lbp(gray)
+        glcm_features = self._extract_glcm(gray)
+        
+        # Contour detection
+        contours = self._find_contours(mask)
+        
+        # Area calculation
+        area, fraction = self._calculate_area(mask)
+        
+        # Risk classification
+        risk_level, risk_score = self._classify_risk(
+            area, glcm_features, 
+            proximity_to_water=self._estimate_water_proximity(img),
+            site_accessibility=self._assess_accessibility(img)
+        )
+        
+        return {
+            'image': img,
+            'mask': mask,
+            'contours': contours,
+            'waste_area': area,
+            'waste_fraction': fraction,
+            'risk_level': risk_level,
+            'risk_score': risk_score,
+            'texture_features': glcm_features
+        }
+    
+    def _preprocess(self, image_path):
+        img = cv2.imread(image_path)
+        img = cv2.resize(img, (1280, 1280))
+        blurred = cv2.GaussianBlur(img, (5, 5), 0)
+        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+        return img, hsv
+    
+    def _color_segmentation(self, hsv):
+        # Color ranges for waste detection
+        ranges = [
+            (np.array([0, 0, 20]), np.array([30, 255, 200])),   # Brown/Gray
+            (np.array([0, 0, 0]), np.array([180, 255, 80])),    # Dark
+            (np.array([0, 30, 30]), np.array([180, 255, 255]))  # Mixed
+        ]
+        
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for lower, upper in ranges:
+            temp_mask = cv2.inRange(hsv, lower, upper)
+            mask = cv2.bitwise_or(mask, temp_mask)
+        return mask
+    
+    def _refine_mask(self, mask):
+        kernel = np.ones((5, 5), np.uint8)
+        eroded = cv2.erode(mask, kernel, iterations=1)
+        dilated = cv2.dilate(eroded, kernel, iterations=2)
+        return cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
+    
+    def _extract_lbp(self, gray):
+        radius = 3
+        n_points = 8 * radius
+        lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
+        hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3),
+                               range=(0, n_points + 2))
+        hist = hist.astype("float")
+        hist /= (hist.sum() + 1e-7)
+        return hist, lbp
+    
+    def _extract_glcm(self, gray):
+        glcm = graycomatrix(gray, distances=[1, 2, 3], 
+                           angles=[0, np.pi/4, np.pi/2, 3*np.pi/4],
+                           levels=256, symmetric=True, normed=True)
+        
+        return {
+            'contrast': np.mean(graycoprops(glcm, 'contrast')),
+            'dissimilarity': np.mean(graycoprops(glcm, 'dissimilarity')),
+            'homogeneity': np.mean(graycoprops(glcm, 'homogeneity')),
+            'energy': np.mean(graycoprops(glcm, 'energy')),
+            'correlation': np.mean(graycoprops(glcm, 'correlation'))
+        }
+    
+    def _find_contours(self, mask):
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, 
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        min_area = 100
+        return [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+    
+    def _calculate_area(self, mask):
+        waste_pixels = np.count_nonzero(mask)
+        total_pixels = mask.shape[0] * mask.shape[1]
+        gsd = 0.05 * (self.drone_altitude / 50)
+        area_per_pixel = gsd * gsd
+        return waste_pixels * area_per_pixel, waste_pixels / total_pixels
+    
+    def _classify_risk(self, area, glcm_features, proximity_to_water, 
+                       site_accessibility):
+        risk_score = 0
+        
+        # Area score
+        if area < 50:
+            risk_score += 10
+        elif area < 200:
+            risk_score += 20
+        elif area < 500:
+            risk_score += 28
+        else:
+            risk_score += 35
+        
+        # Texture score
+        texture_score = (glcm_features['contrast'] / 1000 + 
+                        glcm_features['dissimilarity'] * 10)
+        risk_score += min(20, texture_score * 2)
+        
+        # Proximity to water
+        if proximity_to_water < 50:
+            risk_score += 15
+        elif proximity_to_water < 200:
+            risk_score += 10
+        elif proximity_to_water < 500:
+            risk_score += 5
+        
+        # Accessibility
+        access_scores = {'high': 15, 'medium': 10, 'low': 5}
+        risk_score += access_scores.get(site_accessibility, 5)
+        
+        if risk_score >= 70:
+            return 'HIGH', risk_score
+        elif risk_score >= 40:
+            return 'MEDIUM', risk_score
+        else:
+            return 'LOW', risk_score
+    
+    def _estimate_water_proximity(self, img):
+        # Simplified: detect blue regions as water
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        lower_blue = np.array([90, 50, 50])
+        upper_blue = np.array([130, 255, 255])
+        water_mask = cv2.inRange(hsv, lower_blue, upper_blue)
+        
+        if np.sum(water_mask) > 0:
+            return 50  # Close to water
+        return 500  # Far from water
+    
+    def _assess_accessibility(self, img):
+        # Simplified assessment based on road detection
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100,
+                                minLineLength=100, maxLineGap=50)
+        
+        if lines is not None and len(lines) > 5:
+            return 'high'
+        elif lines is not None and len(lines) > 2:
+            return 'medium'
+        return 'low'
+    
+    def visualize_results(self, results):
+        """Visualize detection results."""
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        
+        # Original image with contours
+        img_with_contours = results['image'].copy()
+        cv2.drawContours(img_with_contours, results['contours'], -1, 
+                        (0, 255, 0), 2)
+        axes[0].imshow(cv2.cvtColor(img_with_contours, cv2.COLOR_BGR2RGB))
+        axes[0].set_title(f'Detected Waste\nRisk: {results["risk_level"]}')
+        axes[0].axis('off')
+        
+        # Waste mask
+        axes[1].imshow(results['mask'], cmap='gray')
+        axes[1].set_title(f'Waste Mask\nArea: {results["waste_area"]:.2f} m²')
+        axes[1].axis('off')
+        
+        # Risk summary
+        axes[2].text(0.1, 0.8, f'Risk Level: {results["risk_level"]}', 
+                    fontsize=14, weight='bold')
+        axes[2].text(0.1, 0.6, f'Risk Score: {results["risk_score"]:.1f}/100')
+        axes[2].text(0.1, 0.4, f'Waste Area: {results["waste_area"]:.2f} m²')
+        axes[2].text(0.1, 0.2, f'Waste Fraction: {results["waste_fraction"]:.2%}')
+        axes[2].axis('off')
+        
+        plt.tight_layout()
+        plt.show()
+        
+        return fig

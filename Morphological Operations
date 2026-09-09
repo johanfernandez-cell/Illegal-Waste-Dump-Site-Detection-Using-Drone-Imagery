@@ -1,0 +1,15 @@
+def refine_mask(mask):
+    """
+    Apply morphological operations to clean the segmentation mask.
+    """
+    # Erosion to remove small noise
+    kernel = np.ones((5, 5), np.uint8)
+    eroded = cv2.erode(mask, kernel, iterations=1)
+    
+    # Dilation to fill gaps
+    dilated = cv2.dilate(eroded, kernel, iterations=2)
+    
+    # Closing operation (dilation followed by erosion)
+    closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
+    
+    return closed

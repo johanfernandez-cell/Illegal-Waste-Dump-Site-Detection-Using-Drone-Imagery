@@ -1,0 +1,27 @@
+def detect_waste(image_path):
+    """
+    Complete waste detection pipeline.
+    """
+    # Pre-process image
+    img, hsv = preprocess_image(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Color segmentation
+    color_mask = color_segmentation(hsv)
+    
+    # Refine mask
+    refined_mask = refine_mask(color_mask)
+    
+    # Texture analysis for verification
+    lbp_hist, lbp = extract_lbp_features(gray)
+    glcm_features = extract_glcm_features(gray)
+    
+    # Find contours of waste regions
+    contours, _ = cv2.findContours(refined_mask, cv2.RETR_EXTERNAL, 
+                                    cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Filter contours by area (remove small noise)
+    min_area = 100  # Minimum pixel area
+    waste_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+    
+    return img, refined_mask, waste_contours, glcm_features

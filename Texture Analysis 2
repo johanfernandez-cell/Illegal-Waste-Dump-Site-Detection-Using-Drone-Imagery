@@ -1,0 +1,30 @@
+from skimage.feature import graycomatrix, graycoprops
+
+def extract_glcm_features(gray_image):
+    """
+    Extract GLCM texture features for waste characterization.
+    """
+    # Define distances and angles
+    distances = [1, 2, 3]
+    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    
+    # Compute GLCM
+    glcm = graycomatrix(gray_image, distances=distances, angles=angles, 
+                        levels=256, symmetric=True, normed=True)
+    
+    # Extract Haralick features
+    contrast = graycoprops(glcm, 'contrast')
+    dissimilarity = graycoprops(glcm, 'dissimilarity')
+    homogeneity = graycoprops(glcm, 'homogeneity')
+    energy = graycoprops(glcm, 'energy')
+    correlation = graycoprops(glcm, 'correlation')
+    
+    features = {
+        'contrast': np.mean(contrast),
+        'dissimilarity': np.mean(dissimilarity),
+        'homogeneity': np.mean(homogeneity),
+        'energy': np.mean(energy),
+        'correlation': np.mean(correlation)
+    }
+    
+    return features

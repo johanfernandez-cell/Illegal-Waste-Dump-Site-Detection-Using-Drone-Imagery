@@ -1,0 +1,50 @@
+def classify_risk(waste_area, glcm_features, proximity_to_water, 
+                  site_accessibility):
+    """
+    Classify waste site into Low, Medium, or High risk.
+    """
+    # Calculate risk score (0-100)
+    risk_score = 0
+    
+    # Area score (0-35 points)
+    if waste_area < 50:
+        risk_score += 10
+    elif waste_area < 200:
+        risk_score += 20
+    elif waste_area < 500:
+        risk_score += 28
+    else:
+        risk_score += 35
+    
+    # Texture score (0-20 points)
+    texture_score = (glcm_features['contrast'] / 1000 + 
+                     glcm_features['dissimilarity'] * 10)
+    risk_score += min(20, texture_score * 2)
+    
+    # Proximity to water score (0-15 points)
+    if proximity_to_water < 50:  # meters
+        risk_score += 15
+    elif proximity_to_water < 200:
+        risk_score += 10
+    elif proximity_to_water < 500:
+        risk_score += 5
+    
+    # Accessibility score (0-15 points)
+    # Higher risk for easily accessible sites (more likely to be used)
+    if site_accessibility == 'high':
+        risk_score += 15
+    elif site_accessibility == 'medium':
+        risk_score += 10
+    else:
+        risk_score += 5
+    
+    # Color variability score (0-15 points)
+    # More color variety indicates mixed waste (higher risk)
+    
+    # Classification
+    if risk_score >= 70:
+        return 'HIGH', risk_score
+    elif risk_score >= 40:
+        return 'MEDIUM', risk_score
+    else:
+        return 'LOW', risk_score

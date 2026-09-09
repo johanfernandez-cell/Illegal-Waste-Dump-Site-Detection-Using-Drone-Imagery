@@ -1,0 +1,20 @@
+from skimage.feature import local_binary_pattern
+
+def extract_lbp_features(gray_image):
+    """
+    Extract LBP texture features from the image.
+    """
+    # Parameters for LBP
+    radius = 3
+    n_points = 8 * radius
+    
+    # Compute LBP
+    lbp = local_binary_pattern(gray_image, n_points, radius, method='uniform')
+    
+    # Compute histogram of LBP
+    hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3), 
+                           range=(0, n_points + 2))
+    hist = hist.astype("float")
+    hist /= (hist.sum() + 1e-7)
+    
+    return hist, lbp

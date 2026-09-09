@@ -1,0 +1,28 @@
+def color_segmentation(hsv_image):
+    """
+    Identify waste-covered regions using color thresholding in HSV space.
+    Waste typically appears in brown, gray, dark, and mixed color patterns.
+    """
+    # Define color ranges for waste detection
+    # Brown/Gray waste
+    lower_brown = np.array([0, 0, 20])
+    upper_brown = np.array([30, 255, 200])
+    
+    # Dark waste/soil
+    lower_dark = np.array([0, 0, 0])
+    upper_dark = np.array([180, 255, 80])
+    
+    # Mixed waste (various colors)
+    lower_mixed = np.array([0, 30, 30])
+    upper_mixed = np.array([180, 255, 255])
+    
+    # Create masks
+    mask_brown = cv2.inRange(hsv_image, lower_brown, upper_brown)
+    mask_dark = cv2.inRange(hsv_image, lower_dark, upper_dark)
+    mask_mixed = cv2.inRange(hsv_image, lower_mixed, upper_mixed)
+    
+    # Combine masks
+    combined_mask = cv2.bitwise_or(mask_brown, mask_dark)
+    combined_mask = cv2.bitwise_or(combined_mask, mask_mixed)
+    
+    return combined_mask

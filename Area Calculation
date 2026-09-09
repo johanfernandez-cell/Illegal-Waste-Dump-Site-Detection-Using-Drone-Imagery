@@ -1,0 +1,32 @@
+def calculate_area(mask, drone_altitude, camera_fov, image_width, image_height):
+    """
+    Calculate the real-world area covered by waste.
+    
+    Parameters:
+    - mask: Binary mask of detected waste regions
+    - drone_altitude: Altitude of drone in meters
+    - camera_fov: Field of view of camera in degrees
+    - image_width, image_height: Image dimensions in pixels
+    """
+    # Calculate pixel to real-world conversion factor
+    # Ground Sampling Distance (GSD) formula
+    # GSD = (sensor_width * altitude * 100) / (focal_length * image_width)
+    # Simplified approach:
+    
+    # Count waste pixels
+    waste_pixels = np.count_nonzero(mask)
+    total_pixels = mask.shape[0] * mask.shape[1]
+    waste_fraction = waste_pixels / total_pixels
+    
+    # Calculate total ground area covered by image
+    # Using simplified approximation based on altitude
+    # At 50m altitude, typical GSD is ~0.05 m/pixel[reference:10]
+    gsd = 0.05 * (drone_altitude / 50)  # Scale with altitude
+    
+    # Area per pixel
+    area_per_pixel = gsd * gsd  # square meters
+    
+    # Total waste area
+    waste_area = waste_pixels * area_per_pixel
+    
+    return waste_area, waste_fraction

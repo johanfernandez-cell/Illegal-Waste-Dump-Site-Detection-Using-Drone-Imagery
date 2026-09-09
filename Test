@@ -1,0 +1,15 @@
+# Initialize the system
+system = WasteDetectionSystem(drone_altitude=50)
+
+# Process a drone image
+results = system.process_image('drone_image.jpg')
+
+# Display results
+system.visualize_results(results)
+
+# Print summary
+print(f"Risk Level: {results['risk_level']}")
+print(f"Risk Score: {results['risk_score']:.1f}/100")
+print(f"Waste Area: {results['waste_area']:.2f} square meters")
+print(f"Waste Coverage: {results['waste_fraction']:.2%}")
+print(f"Texture Features: {results['texture_features']}")
